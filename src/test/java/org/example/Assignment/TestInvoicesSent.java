@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.List;
 import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TestInvoicesSent {
 
@@ -49,4 +50,33 @@ public class TestInvoicesSent {
 
         verify(sap, never()).send(any(Invoice.class));
     }
+
+    /* Tests that custom exception class is thrown when a bad invoice is sent.
+    Creates a mock of FilterInvoice and SAP and stubs lowValueInvoices() to return a list of
+    predefined invoices. Sap.send() is mocked to raise the custom exception when the bad invoice is sent.
+    SAP_BasedInvoiceSender is called with the mock objects and then sendLowValuedInvoices() is called to
+    send the invoices. The test then asserts that the list of bad invoices has a length of 1 and
+    verifies that the good invoice was sent and the bad invoice raises an exception.
+     */
+    @Test
+    void testThrowExceptionWhenBadInvoice() {
+        FilterInvoice filter = mock(FilterInvoice.class);
+        SAP sap = mock(SAP.class);
+        Invoice goodInvoice = new Invoice("Lily", 50);
+        Invoice badInvoice = new Invoice("Kerr", 75); // This one will fail
+        List<Invoice> lowInvoices = Arrays.asList(goodInvoice, badInvoice);
+
+        when(filter.lowValueInvoices()).thenReturn(lowInvoices);
+
+        doThrow(new FailToSendSAPInvoiceException("Failed to send invoice")).when(sap).send(badInvoice);
+
+        SAP_BasedInvoiceSender sender = new SAP_BasedInvoiceSender(filter, sap);
+        List<Invoice> failedInvoices = sender.sendLowValuedInvoices();
+
+        assertEquals(1, failedInvoices.size());
+        assertEquals(badInvoice, failedInvoices.get(0));
+        verify(sap, times(1)).send(goodInvoice);
+        verify(sap, times(1)).send(badInvoice);
+    }
+
 }
